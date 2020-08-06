@@ -7,7 +7,8 @@ import { v4 as uuidV4 } from "uuid";
 import { readFileSync } from "fs";
 import { createHash } from "crypto";
 import { TokenCredential, GetTokenOptions, AccessToken } from "@azure/core-http";
-import { TokenCredentialOptions, IdentityClient } from "../client/identityClient";
+import { IdentityClient } from "../client/identityClient";
+import { ClientCertificateCredentialOptions } from "./clientCertificateCredentialOptions";
 import { createSpan } from "../util/tracing";
 import { AuthenticationErrorName } from "../client/errors";
 import { CanonicalCode } from "@opentelemetry/api";
@@ -41,6 +42,7 @@ export class ClientCertificateCredential implements TokenCredential {
   private certificateString: string;
   private certificateThumbprint: string;
   private certificateX5t: string;
+  private certificateX5c?: Array<string>;
 
   /**
    * Creates an instance of the ClientCertificateCredential with the details
@@ -55,7 +57,7 @@ export class ClientCertificateCredential implements TokenCredential {
     tenantId: string,
     clientId: string,
     certificatePath: string,
-    options?: TokenCredentialOptions
+    options?: ClientCertificateCredentialOptions
   ) {
     this.identityClient = new IdentityClient(options);
     this.tenantId = tenantId;
@@ -79,6 +81,9 @@ export class ClientCertificateCredential implements TokenCredential {
       .toUpperCase();
 
     this.certificateX5t = Buffer.from(this.certificateThumbprint, "hex").toString("base64");
+    if (options && options.includeX5c) {
+      this.certificateX5c = [publicKey];
+    }
   }
 
   /**
@@ -105,7 +110,8 @@ export class ClientCertificateCredential implements TokenCredential {
       const header: jws.Header = {
         typ: "JWT",
         alg: "RS256",
-        x5t: this.certificateX5t
+        x5t: this.certificateX5t,
+        x5c: this.certificateX5c
       };
 
       const payload = {
